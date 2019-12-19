@@ -30,40 +30,54 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//接收到数据报：检查校验和，设置回复的ACK报文段
 	public void rdt_recv(TCP_PACKET recvPack) {
 
-		System.out.println(" Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+seqCount);
+		System.out.println(" Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
 		//检查校验码，生成ACK		
-		if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum() && seqCount == recvPack.getTcpH().getTh_seq()) {
+		if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
+			System.out.println("sequce number before:" + (recvPack.getTcpH().getTh_seq() - recvPack.getTcpH().getTh_Length()));
+			//检查seq，若为之前的seq，说明重发
+			if( recvPack.getTcpH().getTh_seq() - 1/ recvPack.getTcpS().getDataLengthInByte() == sequence - 1){
+				System.out.println("repeat!!");
+				tcpH.setTh_ack(recvPack.getTcpH().getTh_seq() - recvPack.getTcpS().getDataLengthInByte());
+				ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+				tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
 
-			//生成ACK报文段（设置确认号）
-//			tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
-			tcpH.setTh_ack(seqCount);
-			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-			//回复ACK报文段
-			reply(ackPack);			
-			
-			//将接收到的正确有序的数据插入data队列，准备交付
-			dataQueue.add(recvPack.getTcpS().getData());
-			sequence++;
-			if(seqCount == 0){
-				seqCount = 1;
+				//回复ACK报文段
+				reply(ackPack);
 			}else {
-				seqCount = 0;
+				//生成ACK报文段（设置确认号）
+				tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
+//			tcpH.setTh_ack(0);
+				ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+				tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+				//回复ACK报文段
+				reply(ackPack);
+
+				//将接收到的正确有序的数据插入data队列，准备交付
+				dataQueue.add(recvPack.getTcpS().getData());
+				sequence++;
 			}
 
-		}else if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum() && seqCount != recvPack.getTcpH().getTh_seq()){ 	//序号出错，包无错，重复
-			tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
-			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-			//回复ACK报文段
-			reply(ackPack);
+
+//			if(seqCount == 0){
+//				seqCount = 1;
+//			}else {
+//				seqCount = 0;
+//			}
 
 		}
+//		else{ 	//序号出错，包无错，重复
+//			tcpH.setTh_ack(1);
+//			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+//			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+//			//回复ACK报文段
+//			reply(ackPack);
+//
+//		}
 		else{
 			//System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
 			//System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
-//			System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
-//			System.out.println("something wrong");
+			System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
+			System.out.println("something wrong");
 			tcpH.setTh_ack(-1);
 			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
 			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));

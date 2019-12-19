@@ -15,7 +15,8 @@ import com.ouc.tcp.tool.TCP_TOOL;
 public class TCP_Sender extends TCP_Sender_ADT {
 	
 	private TCP_PACKET tcpPack;	//待发送的TCP数据报
-	int seqCount = 0;	//区分是否重复，标记为0 1
+	int seqCount = 0;	//区分是否重复，标记为0 1 用于2.2以前
+	UDT_Timer timer;
 
 	/*构造函数*/
 	public TCP_Sender() {
@@ -28,9 +29,10 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	public void rdt_send(int dataIndex, int[] appData) {
 				
 		//生成TCP数据报（设置序号和数据字段/校验和),注意打包的顺序
-//		tcpH.setTh_seq(dataIndex * appData.length + 1);//包序号设置为字节流号：
+		tcpH.setTh_seq(dataIndex * appData.length + 1);//包序号设置为字节流号：
 
-		tcpH.setTh_seq(seqCount);
+//		tcpH.setTh_seq(seqCount);
+
 		tcpS.setData(appData);
 		tcpPack = new TCP_PACKET(tcpH, tcpS, destinAddr);		
 				
@@ -42,11 +44,11 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		udt_send(tcpPack);
 		
 		//用于3.0版本：设置计时器和超时重传任务
-				/*timer = new UDT_Timer();
-				UDT_RetransTask reTrans = new UDT_RetransTask(client, tcpPack);
-				
-				//每隔3秒执行重传，直到收到ACK
-				timer.schedule(reTrans, 3000, 3000);*/
+		timer = new UDT_Timer();
+		UDT_RetransTask reTrans = new UDT_RetransTask(client, tcpPack);
+
+		//每隔3秒执行重传，直到收到ACK
+		timer.schedule(reTrans, 3000, 3000);
 		
 		//等待ACK报文
 		waitACK();
@@ -57,7 +59,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	//不可靠发送：将打包好的TCP数据报通过不可靠传输信道发送；仅需修改错误标志
 	public void udt_send(TCP_PACKET stcpPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)1);
+		tcpH.setTh_eflag((byte)5);
 		//System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());				
 		//发送数据报
 		client.send(stcpPack);
@@ -72,8 +74,26 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			if(!ackQueue.isEmpty()){
 				int currentAck=ackQueue.poll();
 				System.out.println("CurrentAck: "+currentAck);
-//				if  (currentAck == tcpPack.getTcpH().getTh_seq()){
+				if  (currentAck == tcpPack.getTcpH().getTh_seq()){
+					System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
+					//用于3.0：
+					timer.cancel();
+					break;
+				}else{
+					System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
+					udt_send(tcpPack);
+					//break;
+				}
+
+
+//				if  (currentAck == tcpPack.getTcpH().getTh_seq() && currentAck == 0){
 //					System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
+////					if(seqCount == 0){
+////						seqCount = 1;
+////					}else {
+////						seqCount = 0;
+////					}
+//					System.out.println("seqCount change: "+seqCount);
 //					//用于3.0：
 //					//timer.cancel();
 //					break;
@@ -82,23 +102,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
 //					udt_send(tcpPack);
 //					//break;
 //				}
-
-				if  (currentAck == tcpPack.getTcpH().getTh_seq() && currentAck == seqCount){
-					System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
-					if(seqCount == 0){
-						seqCount = 1;
-					}else {
-						seqCount = 0;
-					}
-					System.out.println("seqCount change: "+seqCount);
-					//用于3.0：
-					//timer.cancel();
-					break;
-				}else{
-					System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
-					udt_send(tcpPack);
-					//break;
-				}
 			}
 		}
 	}

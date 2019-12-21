@@ -23,6 +23,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	private int send_base = 0;
 	private int winsize = 5;
 	private int nextSeqNum = 0;
+	private int lastNum = 0;
+	private int expectNum = 1;
 
 	/*构造函数*/
 	public TCP_Sender() {
@@ -61,24 +63,48 @@ public class TCP_Sender extends TCP_Sender_ADT {
 //		waitACK();
 
 
-		if(queue.getNextSeqNum() < queue.getSend_base() + queue.getWinsize()) {
-			make_pkt(dataIndex, appData);
-			queue.enqueue( tcpPack, queue.getNextSeqNum() );
+//		if(queue.getNextSeqNum() < queue.getSend_base() + queue.getWinsize()) {
+//			make_pkt(dataIndex, appData);
+		if(queue.getNoAckLength() < queue.getWinsize()){
+			tcpH = new TCP_HEADER();
+			tcpH.setTh_seq(dataIndex * appData.length + 1);//包序号设置为字节流号
+//		tcpH.setTh_seq(seqCount);
+			tcpS.setData(appData);
+			tcpPack = new TCP_PACKET(tcpH, tcpS, destinAddr);
+			tcpH.setTh_sum(CheckSum.computeChkSum(tcpPack));
+			tcpPack.setTcpH(tcpH);
+			try{
+				queue.enqueue( tcpPack.clone(), queue.getNextSeqNum() );
+			}catch (Exception e){
+				System.out.println(e);
+			}
+
+			System.out.println("发送了"+ queue.search(queue.getNextSeqNum()).getTcpH().getTh_seq()+ "在"+queue.getNextSeqNum());
 			//发送TCP数据报
 			udt_send(queue.search(queue.getNextSeqNum()));
 			//重置定时器的情况，即窗口重新开始
 			if(queue.getSend_base() == queue.getNextSeqNum()) {
 				timer = new UDT_Timer();
-				Retrans reTrans = new Retrans(client, queue);
+				Retrans reTrans = new Retrans(client, queue, queue.getSend_base(), queue.getNextSeqNum());
 				timer.schedule(reTrans, 3000, 3000);
 			}
 			queue.setNextSeqNum((queue.getNextSeqNum()+1)% queue.getLength());
 
 			//等待ACK报文
-			waitACK();
+//			waitACK();
+			System.out.println("Send_base3(: " + queue.getSend_base());
+			System.out.println("nextNum 3(: " + queue.getNextSeqNum());
 
-		}else {
-//			return;
+//			if(queue.getNextSeqNum() == queue.getSend_base() + queue.getWinsize() - 1){
+			if(queue.getNoAckLength() == queue.getWinsize() - 1){
+				System.out.println("接下来的"+tcpPack.getTcpH().getTh_seq()+"以后的包就先不要发了");
+				waitSEND();
+			}
+
+		}else{
+			System.out.println("!!!!超过了");
+
+			return;
 		}
 
 
@@ -87,26 +113,28 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		
 	}
 
-	public void update(CycleQueue queue){
-		nextSeqNum = queue.getNextSeqNum();
-		send_base = queue.getSend_base();
-		winsize = queue.getWinsize();
-	}
-
-	public void deupdate(CycleQueue queue, int nextSeqNum, int send_base){
-		queue.setNextSeqNum(nextSeqNum );
-		queue.setSend_base(send_base );
-	}
 	@Override
 	//不可靠发送：将打包好的TCP数据报通过不可靠传输信道发送；仅需修改错误标志
 	public void udt_send(TCP_PACKET stcpPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)7);
+		tcpH.setTh_eflag((byte)3);
+		stcpPack.getTcpH().setTh_eflag((byte)7);
 		//System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());				
 		//发送数据报
 		client.send(stcpPack);
 	}
-	
+
+	//用于卡死发送程序
+	public void waitSEND(){
+
+		while(true){
+			if(queue.getNextSeqNum() == queue.getSend_base() ) {
+				System.out.println("现在你被释放了，你可以继续发送了");
+				break;
+			}
+		}
+
+	}
 	@Override
 	//需要修改
 	public void waitACK() {
@@ -117,36 +145,16 @@ public class TCP_Sender extends TCP_Sender_ADT {
 				int currentAck=ackQueue.poll();
 				System.out.println("CurrentAck: "+currentAck);
 
-//				if  (currentAck == tcpPack.getTcpH().getTh_seq()){
-//					System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
-//					//用于3.0：
-//					timer.cancel();
-//					break;
-//				}else{
-//					System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
-//					udt_send(tcpPack);
-//					//break;
-//				}
-
-				if  (currentAck == tcpPack.getTcpH().getTh_seq()) {
-					System.out.println("Clear: " + tcpPack.getTcpH().getTh_seq());
-
-//				send_base = ( currentAck + 1 ) % queue.getLength();
-					queue.setSend_base(( (currentAck - 1 )/100 + 1) % queue.getLength());
-					if (queue.getSend_base() == queue.getNextSeqNum()) {
-						timer.cancel();
-						break;
-					} else {
-						timer = new UDT_Timer();
-						Retrans reTrans = new Retrans(client, queue);
-						timer.schedule(reTrans, 3000, 3000);
-						break;
-					}
-				}else {
-
+				if  (currentAck == tcpPack.getTcpH().getTh_seq()){
+					System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
+					//用于3.0：
+					timer.cancel();
+					break;
+				}else{
+					System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
+					udt_send(tcpPack);
+					//break;
 				}
-
-
 
 //				if  (currentAck == tcpPack.getTcpH().getTh_seq() && currentAck == 0){
 //					System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
@@ -166,12 +174,46 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		}
 	}
 
+
 	@Override
 	//接收到ACK报文：检查校验和，将确认号插入ack队列;NACK的确认号为－1；3.0版本不需要修改
 	public void recv(TCP_PACKET recvPack) {
 		System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
-		ackQueue.add(recvPack.getTcpH().getTh_ack());
-	    System.out.println();
+//		ackQueue.add(recvPack.getTcpH().getTh_ack());
+		if  (recvPack.getTcpH().getTh_ack() == tcpPack.getTcpH().getTh_seq()) {
+
+			System.out.println("Clear: " + tcpPack.getTcpH().getTh_seq());
+			expectNum = expectNum + 100;
+			lastNum = recvPack.getTcpH().getTh_ack();
+
+			queue.setSend_base(( (recvPack.getTcpH().getTh_ack() - 1 )/100 + 1) % queue.getLength());
+			System.out.println("Send_base1(: " + queue.getSend_base());
+			System.out.println("next  ssss1(: " + queue.getNextSeqNum());
+			if (queue.getSend_base() == queue.getNextSeqNum()) {
+				timer.cancel();
+
+			} else {
+
+				System.out.println("refresh the timer");
+				System.out.println("re Send_base(: " + queue.getSend_base());
+				System.out.println("re next  ssss(: " + queue.getNextSeqNum());
+				timer = new UDT_Timer();
+				Retrans reTrans = new Retrans(client, queue, queue.getSend_base(), queue.getNextSeqNum());
+				timer.schedule(reTrans, 3000, 3000);
+			}
+		}else if(recvPack.getTcpH().getTh_seq() > recvPack.getTcpH().getTh_ack()) {
+
+		}
+		else if(recvPack.getTcpH().getTh_ack() < 0){
+////			//报文错误
+//////			System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
+			for (int i = queue.send_base; i < queue.getNextSeqNum(); i = (i + 1) % queue.getLength()) {
+				udt_send(queue.search(i));
+			}
+			System.out.println("Send_base2(: " + queue.getSend_base());
+			System.out.println("next  ssss2(: " + queue.getNextSeqNum());
+		}
+
 	}
 
 	/**
@@ -179,12 +221,13 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	 */
 	public TCP_PACKET make_pkt(int dataIndex, int[] appData){
 		//生成TCP数据报（设置序号和数据字段/校验和),注意打包的顺序
-		tcpH.setTh_seq(dataIndex * appData.length + 1);//包序号设置为字节流号：
-//		tcpH.setTh_seq(seqCount);
-		tcpS.setData(appData);
-		tcpPack = new TCP_PACKET(tcpH, tcpS, destinAddr);
-		tcpH.setTh_sum(CheckSum.computeChkSum(tcpPack));
-		tcpPack.setTcpH(tcpH);
+//		tcpH.setTh_seq(dataIndex * appData.length + 1);//包序号设置为字节流号：
+//		System.out.println("打包");
+////		tcpH.setTh_seq(seqCount);
+//		tcpS.setData(appData);
+//		tcpPack = new TCP_PACKET(tcpH, tcpS, destinAddr);
+//		tcpH.setTh_sum(CheckSum.computeChkSum(tcpPack));
+//		tcpPack.setTcpH(tcpH);
 		return tcpPack;
 	}
 

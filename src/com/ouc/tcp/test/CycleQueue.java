@@ -69,6 +69,9 @@ public class CycleQueue{
     public int getLength(){
         return max;
     }
+    public int getNoAckLength(){
+        return (nextSeqNum-send_base + max )% max;
+    }
 
     public Object dequeue()
     {

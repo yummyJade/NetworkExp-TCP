@@ -30,31 +30,59 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//接收到数据报：检查校验和，设置回复的ACK报文段
 	public void rdt_recv(TCP_PACKET recvPack) {
 
-
+		System.out.println("  Receive Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
 		//检查校验码，生成ACK		
-		if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum() && recvPack.getTcpH().getTh_seq() == sequence) {
-			System.out.println(" Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
-			//生成ACK报文段（设置确认号）
+		if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum() ) {
+//			tcpH.setTh_seq(recvPack.getTcpH().getTh_seq());
+			if(recvPack.getTcpH().getTh_seq() == sequence){
+				System.out.println(" Packet Number1111111: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
+				//生成ACK报文段（设置确认号）
 //				tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
 //			tcpH.setTh_ack(0);
-			tcpH.setTh_ack(sequence);
-			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-			//回复ACK报文段
-			reply(ackPack);
-
-			//将接收到的正确有序的数据插入data队列，准备交付
-			dataQueue.add(recvPack.getTcpS().getData());
+				tcpH.setTh_ack(sequence);
+				ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+				tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+				//回复ACK报文段
+				reply(ackPack);
+				//将接收到的正确有序的数据插入data队列，准备交付
+				dataQueue.add(recvPack.getTcpS().getData());
 //				sequence++;
-			sequence = sequence + 100;
+				sequence = sequence + 100;
+			}else if(recvPack.getTcpH().getTh_seq() < sequence){
+				tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
+				ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+				tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+				//回复ACK报文段
+				reply(ackPack);
+
+			}else {
+				tcpH.setTh_ack(sequence -100);
+				ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+				tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+				//回复ACK报文段
+				reply(ackPack);
+
+			}
+
 		}else {
-			tcpH.setTh_ack(sequence - 100);
+			System.out.println(" Packet Number222222222: "+recvPack.getTcpH().getTh_seq());
+//			tcpH.setTh_ack(-1);
+			tcpH.setTh_ack(sequence -100);
 			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
 			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
 			//回复ACK报文段
 			reply(ackPack);
 
 		}
+
+//		else {
+//			tcpH.setTh_ack(sequence );
+//			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+//			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+//			//回复ACK报文段
+//			reply(ackPack);
+//
+//		}
 //		else{
 //			//System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
 //			//System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());

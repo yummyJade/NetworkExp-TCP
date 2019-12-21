@@ -63,7 +63,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 //		waitACK();
 
 
-//		if(queue.getNextSeqNum() < queue.getSend_base() + queue.getWinsize()) {
+
 //			make_pkt(dataIndex, appData);
 		if(queue.getNoAckLength() < queue.getWinsize()){
 			tcpH = new TCP_HEADER();
@@ -85,7 +85,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			//重置定时器的情况，即窗口重新开始
 			if(queue.getSend_base() == queue.getNextSeqNum()) {
 				timer = new UDT_Timer();
-				Retrans reTrans = new Retrans(client, queue, queue.getSend_base(), queue.getNextSeqNum());
+				Retrans reTrans = new Retrans(client, queue);
 				timer.schedule(reTrans, 3000, 3000);
 			}
 			queue.setNextSeqNum((queue.getNextSeqNum()+1)% queue.getLength());
@@ -95,7 +95,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			System.out.println("Send_base3(: " + queue.getSend_base());
 			System.out.println("nextNum 3(: " + queue.getNextSeqNum());
 
-//			if(queue.getNextSeqNum() == queue.getSend_base() + queue.getWinsize() - 1){
+
 			if(queue.getNoAckLength() == queue.getWinsize() - 1){
 				System.out.println("接下来的"+tcpPack.getTcpH().getTh_seq()+"以后的包就先不要发了");
 				waitSEND();
@@ -135,6 +135,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		}
 
 	}
+
+
 	@Override
 	//需要修改
 	public void waitACK() {
@@ -198,7 +200,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 				System.out.println("re Send_base(: " + queue.getSend_base());
 				System.out.println("re next  ssss(: " + queue.getNextSeqNum());
 				timer = new UDT_Timer();
-				Retrans reTrans = new Retrans(client, queue, queue.getSend_base(), queue.getNextSeqNum());
+				Retrans reTrans = new Retrans(client, queue);
 				timer.schedule(reTrans, 3000, 3000);
 			}
 		}else if(recvPack.getTcpH().getTh_seq() > recvPack.getTcpH().getTh_ack()) {

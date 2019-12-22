@@ -23,8 +23,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	private int send_base = 0;
 	private int winsize = 5;
 	private int nextSeqNum = 0;
-	private int lastNum = 0;
-	private int expectNum = 1;
 
 	/*构造函数*/
 	public TCP_Sender() {
@@ -65,6 +63,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
 
 //			make_pkt(dataIndex, appData);
+
 		if(queue.getNoAckLength() < queue.getWinsize()){
 			tcpH = new TCP_HEADER();
 			tcpH.setTh_seq(dataIndex * appData.length + 1);//包序号设置为字节流号
@@ -83,12 +82,19 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			//发送TCP数据报
 			udt_send(queue.search(queue.getNextSeqNum()));
 			//重置定时器的情况，即窗口重新开始
-			if(queue.getSend_base() == queue.getNextSeqNum()) {
-				timer = new UDT_Timer();
-				Retrans reTrans = new Retrans(client, queue);
+//			if(queue.getSend_base() == queue.getNextSeqNum()) {
+				UDT_Timer timer = new UDT_Timer();
+			try{
+				Retrans reTrans = new Retrans(client, tcpPack.clone());
 				timer.schedule(reTrans, 3000, 3000);
+			}catch (Exception e){
+				System.out.println(e);
 			}
+				queue.setTimer(timer, queue.getNextSeqNum());
+//			}
 			queue.setNextSeqNum((queue.getNextSeqNum()+1)% queue.getLength());
+			//清除一切可能
+			queue.setAcked(false,(queue.getNextSeqNum()+1)% queue.getLength());
 
 			//等待ACK报文
 //			waitACK();
@@ -182,38 +188,71 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	public void recv(TCP_PACKET recvPack) {
 		System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
 //		ackQueue.add(recvPack.getTcpH().getTh_ack());
-		if  (recvPack.getTcpH().getTh_ack() == tcpPack.getTcpH().getTh_seq()) {
+		int index = ( (recvPack.getTcpH().getTh_ack() - 1 )/100 ) % queue.getLength();
+		if  (recvPack.getTcpH().getTh_ack() > 0) {
 
-			System.out.println("Clear: " + tcpPack.getTcpH().getTh_seq());
-			expectNum = expectNum + 100;
-			lastNum = recvPack.getTcpH().getTh_ack();
+//			if(recvPack.getTcpH().getTh_ack() >= queue.getSend_base())
+			System.out.println("Clear: " + recvPack.getTcpH().getTh_ack());
 
-			queue.setSend_base(( (recvPack.getTcpH().getTh_ack() - 1 )/100 + 1) % queue.getLength());
-			System.out.println("Send_base1(: " + queue.getSend_base());
-			System.out.println("next  ssss1(: " + queue.getNextSeqNum());
-			if (queue.getSend_base() == queue.getNextSeqNum()) {
-				timer.cancel();
+//			queue.setSend_base(index);
+			queue.getTimer(index).cancel();
+			queue.setAcked(true, index);
 
-			} else {
+;
 
-				System.out.println("refresh the timer");
-				System.out.println("re Send_base(: " + queue.getSend_base());
-				System.out.println("re next  ssss(: " + queue.getNextSeqNum());
-				timer = new UDT_Timer();
-				Retrans reTrans = new Retrans(client, queue);
-				timer.schedule(reTrans, 3000, 3000);
+			//移动指针
+			int i = queue.getSend_base();
+			while (true) {
+				if(queue.isAcked(i)) {
+					queue.setAcked(false, i);
+					i = (i + 1) % queue.getLength();
+					queue.setSend_base(i);
+
+
+				}else {
+					break;
+				}
 			}
-		}else if(recvPack.getTcpH().getTh_seq() > recvPack.getTcpH().getTh_ack()) {
+
+
+			System.out.println("Send_base1(: " + queue.getSend_base());
+			System.out.println("next ssss1(: " + queue.getNextSeqNum());
+
+//			if (queue.getSend_base() == queue.getNextSeqNum()) {
+//				timer.cancel();
+//
+//			} else {
+//
+//				System.out.println("refresh the timer");
+//				System.out.println("re Send_base(: " + queue.getSend_base());
+//				System.out.println("re next  ssss(: " + queue.getNextSeqNum());
+//				timer = new UDT_Timer();
+//				Retrans reTrans = new Retrans(client, tcpPack);
+//				timer.schedule(reTrans, 3000, 3000);
+//			}
+
+
 
 		}
-		else if(recvPack.getTcpH().getTh_ack() < 0){
-////			//报文错误
+		else if(recvPack.getTcpH().getTh_ack() == -1){
+////			//报文错误，重传
 //////			System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
-			for (int i = queue.send_base; i < queue.getNextSeqNum(); i = (i + 1) % queue.getLength()) {
-				udt_send(queue.search(i));
-			}
-			System.out.println("Send_base2(: " + queue.getSend_base());
-			System.out.println("next  ssss2(: " + queue.getNextSeqNum());
+//			for (int i = queue.send_base; i < queue.getNextSeqNum(); i = (i + 1) % queue.getLength()) {
+//				udt_send(queue.search(recvPack.getTcpH().getTh_seq()));
+////			}
+//			UDT_Timer timer = new UDT_Timer();
+//			Retrans retrans = new Retrans(client, recvPack);
+//			timer.schedule(retrans, 3000, 3000);
+//			System.out.println("Send_base2(: " + queue.getSend_base());
+//			System.out.println("next  ssss2(: " + queue.getNextSeqNum());
+
+		}else if(recvPack.getTcpH().getTh_ack() < 0){
+//			udt_send(queue.search(recvPack.getTcpH().getTh_seq()));
+//			UDT_Timer timer = new UDT_Timer();
+//			Retrans retrans = new Retrans(client, recvPack);
+//			timer.schedule(retrans, 3000, 3000);
+//			System.out.println("Send_base3(: " + queue.getSend_base());
+//			System.out.println("next  ssss3(: " + queue.getNextSeqNum());
 		}
 
 	}

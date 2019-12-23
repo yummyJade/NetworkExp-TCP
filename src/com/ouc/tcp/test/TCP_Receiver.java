@@ -16,7 +16,7 @@ import com.ouc.tcp.tool.TCP_TOOL;
 public class TCP_Receiver extends TCP_Receiver_ADT {
 	
 	private TCP_PACKET ackPack;	//回复的ACK报文段
-	private CycleQueue receQueue = new CycleQueue(100,20);	//设置窗口与滑动窗口的大小
+	private CycleQueue receQueue = new CycleQueue(1000,20);	//设置窗口与滑动窗口的大小
 	int seqCount = 0;
 	int sequence=1;//用于记录当前待接收的包序号，注意包序号不完全是
 	int count = 0;
@@ -36,8 +36,8 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 
 
 		//检查校验码，生成ACK
-		System.out.println("CheckSum.computeChkSum:" + CheckSum.computeChkSum(recvPack));
-		System.out.println("recvPack.getTcpH().getTh_sum():" + recvPack.getTcpH().getTh_sum());
+//		System.out.println("CheckSum.computeChkSum:" + CheckSum.computeChkSum(recvPack));
+//		System.out.println("recvPack.getTcpH().getTh_sum():" + recvPack.getTcpH().getTh_sum());
 		if(CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum() ) {
 
 			//检查是否在窗口里面

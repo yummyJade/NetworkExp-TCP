@@ -9,17 +9,33 @@ public class Retrans extends TimerTask {
 
     private Client senderClient;
     private TCP_PACKET reTransPacket;
-//    private CycleQueue queue;
+    private Integer ssthresh;
+    private CycleQueue queue;
+    private int type;
 
-    public Retrans(Client client, TCP_PACKET packet) {
+    public Retrans(Client client, TCP_PACKET packet, Integer ssthresh, CycleQueue queue, int type) {
         this.senderClient = client;
         this.reTransPacket = packet;
-//        this.queue = queue;
+        this.ssthresh = ssthresh;
+        this.queue = queue;
+        this.type = type;
 
     }
 
     public void run() {
-        this.senderClient.send(this.reTransPacket);
+
+        if(type == 1){
+            queue.getRoundTimer().cancel();
+            queue.multiDecrease();
+            this.senderClient.send(this.reTransPacket);
+            System.out.println("出现超时！！！！！重置");
+        }else {
+            queue.addIncrease();
+        }
+
+
+
+
 //        int start = queue.getSend_base();
 //        int end = queue.getNextSeqNum();
 //        System.out.println("retrans from" + start + "to" + end + "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");

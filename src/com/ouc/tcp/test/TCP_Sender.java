@@ -19,10 +19,16 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	int seqCount = 0;	//区分是否重复，标记为0 1 用于2.2以前
 	private UDT_Timer timer;
 
-	private CycleQueue queue = new CycleQueue(100,5);	//设置窗口与滑动窗口的大小
+	private CycleQueue queue = new CycleQueue(1000,1, 16);	//设置窗口与滑动窗口的大小
 	private int send_base = 0;
 	private int winsize = 5;
 	private int nextSeqNum = 0;
+//	private Integer ssthresh = 16;	//拥塞门限
+	private long RTT = 0;		//往返时延
+	private int roundCount; 	//传输轮次计算
+	private UDT_Timer roundTimer;		//传输轮次计时器
+
+//	private Date date; 	//
 
 	/*构造函数*/
 	public TCP_Sender() {
@@ -64,6 +70,11 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
 //			make_pkt(dataIndex, appData);
 
+		if(queue.getNoAckLength() >= queue.getWinsize()) {
+			System.out.println("接下来的"+tcpPack.getTcpH().getTh_seq()+"以后的包就先不要发了");
+			waitSEND();
+		}
+
 		if(queue.getNoAckLength() < queue.getWinsize()){
 			tcpH = new TCP_HEADER();
 			tcpH.setTh_seq(dataIndex * appData.length + 1);//包序号设置为字节流号
@@ -85,12 +96,14 @@ public class TCP_Sender extends TCP_Sender_ADT {
 //			if(queue.getSend_base() == queue.getNextSeqNum()) {
 				UDT_Timer timer = new UDT_Timer();
 			try{
-				Retrans reTrans = new Retrans(client, tcpPack.clone());
-				timer.schedule(reTrans, 3000, 3000);
+				Retrans reTrans = new Retrans(client, tcpPack.clone(), queue.getSsthresh(), queue, 1);
+				timer.schedule(reTrans, 2000, 2000);
 			}catch (Exception e){
 				System.out.println(e);
 			}
 				queue.setTimer(timer, queue.getNextSeqNum());
+			// 设置发送时间戳
+			queue.setSend_time(new Date().getTime());
 //			}
 			queue.setNextSeqNum((queue.getNextSeqNum()+1)% queue.getLength());
 			//清除一切可能
@@ -102,10 +115,10 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			System.out.println("nextNum 3(: " + queue.getNextSeqNum());
 
 
-			if(queue.getNoAckLength() == queue.getWinsize() - 1){
-				System.out.println("接下来的"+tcpPack.getTcpH().getTh_seq()+"以后的包就先不要发了");
-				waitSEND();
-			}
+//			if(queue.getNoAckLength() == queue.getWinsize() - 1){
+//				System.out.println("接下来的"+tcpPack.getTcpH().getTh_seq()+"以后的包就先不要发了");
+//				waitSEND();
+//			}
 
 		}else{
 			System.out.println("!!!!超过了");
@@ -195,10 +208,42 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			System.out.println("Clear: " + recvPack.getTcpH().getTh_ack());
 
 //			queue.setSend_base(index);
+
+
+			//超出门限，开始进入拥塞控制阶段
+			if( queue.getWinsize() > queue.getSsthresh()){
+				roundTimer = new UDT_Timer();
+				try{
+					Retrans reTrans = new Retrans(client, tcpPack.clone(), queue.getSsthresh(), queue, 2);
+					roundTimer.schedule(reTrans,RTT);
+					queue.setRoundTimer(roundTimer);		//设置对列里
+
+				}catch (Exception e){
+					System.out.println(e);
+
+				}
+
+				System.out.println("开始进入拥塞控制状态");
+			}
+
+			//统计轮次，更新RTT
+			if( roundCount > queue.getWinsize()) {
+				roundCount = 0;
+//			RTT = queue.getTimer(index).;
+				long nowTime = new Date().getTime();
+				long inter = nowTime - queue.getSend_time();
+				if(inter < 4000) {
+					RTT = (long)(RTT * (1-0.125) + inter * 0.125);
+				}
+				System.out.println("RTT时间为:"+RTT);
+
+			}else {
+				roundCount++;
+			}
+			System.out.println("winSize:"+roundCount);
+			System.out.println("roundCount:"+roundCount);
 			queue.getTimer(index).cancel();
 			queue.setAcked(true, index);
-
-;
 
 			//移动指针
 			int i = queue.getSend_base();
@@ -217,6 +262,17 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
 			System.out.println("Send_base1(: " + queue.getSend_base());
 			System.out.println("next ssss1(: " + queue.getNextSeqNum());
+
+
+				//每收到一次确认报文，拥塞窗口加一(收到确认以后send_base一定可以后移)
+			if( queue.getWinsize() <= queue.getSsthresh()){
+				queue.setWinsize(queue.getWinsize() + 1);
+			}
+
+
+
+			System.out.println("当前发送窗口为:" + queue.getWinsize());
+			System.out.println("当前门限为："+ queue.getSsthresh());
 
 //			if (queue.getSend_base() == queue.getNextSeqNum()) {
 //				timer.cancel();
